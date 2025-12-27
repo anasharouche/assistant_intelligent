@@ -32,6 +32,7 @@ def get_document(db: Session, doc_id: int) -> Document | None:
 def get_document_by_id(db: Session, document_id: int) -> Document | None:
     return get_document(db, document_id)
 
+
 def delete_document(db: Session, doc: Document) -> None:
     db.delete(doc)
     db.commit()

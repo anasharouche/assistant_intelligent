@@ -8,6 +8,9 @@ from app.db.repositories.user_repo import get_user_by_email, create_user
 ALLOWED_ROLES = {"STUDENT", "TEACHER", "SCOLARITE", "ADMIN"}
 
 
+# =====================
+# REGISTER
+# =====================
 def register(db: Session, email: str, password: str, role: str):
     if role not in ALLOWED_ROLES:
         raise HTTPException(
@@ -29,14 +32,18 @@ def register(db: Session, email: str, password: str, role: str):
         role=role,
     )
 
+    # ✅ JWT basé sur l'email (logique cohérente)
     token = create_access_token(
-        user_id=user.id,
+        email=user.email,
         role=user.role
     )
 
     return user, token
 
 
+# =====================
+# LOGIN
+# =====================
 def login(db: Session, email: str, password: str) -> str:
     user = get_user_by_email(db, email)
 
@@ -46,8 +53,15 @@ def login(db: Session, email: str, password: str) -> str:
             detail="Invalid credentials"
         )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Inactive user"
+        )
+
+    # ✅ JWT basé sur l'email
     token = create_access_token(
-        user_id=user.id,
+        email=user.email,
         role=user.role
     )
 

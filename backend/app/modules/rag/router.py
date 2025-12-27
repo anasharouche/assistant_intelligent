@@ -6,9 +6,8 @@ from app.modules.rag.service import retrieve_context, build_prompt, index_docume
 from app.modules.rag.llm import call_llm
 from app.core.security import get_current_user
 from app.db.models import User
-from app.core.deps import get_db 
+from app.core.deps import get_db
 from app.db.repositories.document_repo import get_document_by_id
-
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
@@ -31,13 +30,18 @@ def index_rag_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # adapte selon ton modèle (doc.file_path / doc.path / doc.stored_path)
     file_path = getattr(doc, "file_path", None)
     if not file_path:
-        raise HTTPException(status_code=500, detail="Document file_path is missing in DB")
+        raise HTTPException(
+            status_code=500,
+            detail="Document file_path is missing in DB"
+        )
 
     try:
-        result = index_document(document_id=int(document_id), file_path=file_path)
+        result = index_document(
+            document_id=int(document_id),
+            file_path=file_path
+        )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -46,7 +50,7 @@ def index_rag_document(
     return {
         "status": "indexed",
         "document_id": int(document_id),
-        **result,
+        "stats": result
     }
 
 
