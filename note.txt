@@ -1,0 +1,10 @@
+{
+    "data": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdHVkZW50MUB0ZXN0LmNvbSIsInJvbGUiOiJTVFVERU5UIiwiZXhwIjoxNzY2NDUwOTkxfQ.sQzoyKsECTZv7YE28-cyx3ACS3Cap7PYwxSk0M2SOIw",
+        "token_type": "bearer"
+    },
+    "meta": {
+        "request_id": null
+    },
+    "error": null
+}
