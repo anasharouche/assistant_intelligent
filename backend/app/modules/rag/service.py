@@ -1,160 +1,211 @@
 import os
 import pickle
-import faiss
-from typing import List, Dict
+import re
+from typing import List, Tuple, Dict, Any
 
+import numpy as np
+import faiss
 from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 
+# =========================
+# CONFIG
+# =========================
 VECTOR_PATH = "storage/vector_store/index.faiss"
 META_PATH = "storage/vector_store/meta.pkl"
-
 os.makedirs("storage/vector_store", exist_ok=True)
 
-# Modèle d'embedding
 model = SentenceTransformer("all-MiniLM-L6-v2")
+EMB_DIM = 384
 
+# =========================
+# RÈGLES MÉTIER (CENTRALISÉES)
+# =========================
+RULE_KEYWORDS = [
+    "est validé si",
+    "est validée si",
+    "est validé",
+    "doit être",
+    "est requis",
+    "est exigé",
+]
 
 # =========================
 # STORE
 # =========================
-def load_store():
+def load_store() -> Tuple[faiss.Index, List[Dict[str, Any]]]:
     if os.path.exists(VECTOR_PATH) and os.path.exists(META_PATH):
         index = faiss.read_index(VECTOR_PATH)
         with open(META_PATH, "rb") as f:
             meta = pickle.load(f)
     else:
-        index = faiss.IndexFlatL2(384)
+        index = faiss.IndexFlatIP(EMB_DIM)
         meta = []
-
     return index, meta
 
 
-def save_store(index, meta):
+def save_store(index: faiss.Index, meta: List[Dict[str, Any]]) -> None:
     faiss.write_index(index, VECTOR_PATH)
     with open(META_PATH, "wb") as f:
         pickle.dump(meta, f)
 
-
 # =========================
-# PDF TEXT EXTRACTION
+# PDF EXTRACTION
 # =========================
-def extract_text_from_pdf(file_path: str) -> str:
+def extract_pages_from_pdf(file_path: str) -> List[Dict[str, Any]]:
     normalized_path = os.path.normpath(file_path)
-
     if not os.path.exists(normalized_path):
         raise FileNotFoundError(f"PDF introuvable : {normalized_path}")
 
     reader = PdfReader(normalized_path)
-    text = ""
+    pages = []
 
-    for page in reader.pages:
-        page_text = page.extract_text()
-        if page_text:
-            text += page_text + "\n"
+    for i, page in enumerate(reader.pages, start=1):
+        text = (page.extract_text() or "").strip()
+        if text:
+            pages.append({"page": i, "text": text})
 
-    return text.strip()
-
+    return pages
 
 # =========================
 # CHUNKING
 # =========================
-def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 900, overlap: int = 150) -> List[str]:
     chunks = []
     start = 0
+    n = len(text)
 
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end]
-        chunks.append(chunk)
-        start = end - overlap
+    while start < n:
+        end = min(start + chunk_size, n)
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end == n:
+            break
+        start = max(0, end - overlap)
 
     return chunks
 
 
+def _normalize(v: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(v, axis=1, keepdims=True) + 1e-12
+    return v / norms
+
 # =========================
-# INDEX DOCUMENT (CORRIGÉ)
+# INDEX DOCUMENT
 # =========================
-def index_document(
-    document_id: int,
-    file_path: str,
-) -> Dict:
+def index_document(document_id: int, file_path: str) -> Dict[str, Any]:
     index, meta = load_store()
+    pages = extract_pages_from_pdf(file_path)
 
-    # 1️⃣ Extraire le texte réel
-    text = extract_text_from_pdf(file_path)
+    if not pages:
+        raise ValueError("PDF vide ou illisible.")
 
-    if not text:
-        raise ValueError("PDF vide ou illisible")
+    all_chunks, all_meta = [], []
 
-    # 2️⃣ Découper en chunks
-    chunks = chunk_text(text)
+    for p in pages:
+        for ci, chunk in enumerate(chunk_text(p["text"])):
+            all_chunks.append(chunk)
+            all_meta.append({
+                "document_id": document_id,
+                "source": file_path,
+                "page": p["page"],
+                "chunk_index": ci,
+                "text": chunk,
+            })
 
-    if not chunks:
-        raise ValueError("Aucun chunk généré depuis le document")
+    emb = model.encode(all_chunks, convert_to_numpy=True).astype("float32")
+    emb = _normalize(emb)
 
-    # 3️⃣ Embeddings
-    embeddings = model.encode(chunks)
-
-    # 4️⃣ Index FAISS
-    index.add(embeddings)
-
-    # 5️⃣ Meta
-    for chunk in chunks:
-        meta.append({
-            "document_id": document_id,
-            "source": file_path,
-            "text": chunk,
-        })
-
+    index.add(emb)
+    meta.extend(all_meta)
     save_store(index, meta)
 
-    # ✅ RETOUR EXPLICITE (clé de la correction)
     return {
-        "chunks_count": len(chunks),
-        "vector_count": index.ntotal,
+        "stats": {
+            "pages_count": len(pages),
+            "chunks_count": len(all_chunks),
+            "vector_count": int(index.ntotal),
+        }
     }
-
 
 # =========================
 # RETRIEVE
 # =========================
-def retrieve_context(question: str, k: int = 5):
+def retrieve_context(question: str, k: int = 5) -> Tuple[List[Dict[str, Any]], List[str]]:
     index, meta = load_store()
 
     if index.ntotal == 0:
         return [], []
 
-    q_emb = model.encode([question])
-    _, idxs = index.search(q_emb, k)
+    q_emb = model.encode([question], convert_to_numpy=True).astype("float32")
+    q_emb = _normalize(q_emb)
 
-    chunks = []
-    sources = []
+    scores, idxs = index.search(q_emb, k)
 
-    for i in idxs[0]:
-        if i < len(meta):
-            chunks.append(meta[i]["text"])
-            sources.append(meta[i]["source"])
+    contexts, sources = [], []
 
-    return chunks, list(set(sources))
+    for score, idx in zip(scores[0], idxs[0]):
+        if idx < 0 or idx >= len(meta):
+            continue
 
+        m = meta[idx]
+        contexts.append({
+            "source": m.get("source"),
+            "page": int(m.get("page", 0)),
+            "score": float(score),
+            "text": m.get("text", ""),
+        })
+
+        if m.get("source"):
+            sources.append(m["source"])
+
+    return contexts, list(set(sources))
 
 # =========================
-# PROMPT
+# EXTRACTION MÉTIER (CLÉ)
 # =========================
-def build_prompt(question: str, context_chunks: List[str]) -> str:
-    context = "\n\n".join(context_chunks)
+def extract_fact_answer(contexts: List[Dict[str, Any]]) -> str:
+    """
+    Extrait UNE règle métier claire côté backend.
+    """
+    for c in contexts:
+        sentences = re.split(r"[.\n]", c["text"])
+        for s in sentences:
+            s = s.strip()
+            if len(s) > 20 and any(k in s.lower() for k in RULE_KEYWORDS):
+                return f"{s} (page {c['page']})"
 
-    return f"""
-Tu es un assistant administratif du service scolarité.
-Réponds UNIQUEMENT avec le contexte fourni.
-Si la réponse n'est pas dans le contexte, dis clairement que tu ne sais pas.
+    return "Je ne sais pas."
 
-CONTEXTE :
-{context}
+# =========================
+# FILTRAGE CONTEXTES
+# =========================
+def extract_normative_contexts(contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    filtered = []
+    for c in contexts:
+        if any(k in c["text"].lower() for k in RULE_KEYWORDS):
+            filtered.append(c)
+    return filtered
 
-QUESTION :
-{question}
+# =========================
+# PROMPT (LLM = REFORMULATION)
+# =========================
+def build_prompt(question: str, contexts: List[Dict[str, Any]]) -> str:
+    parts = [
+        f"[PAGE {c['page']}]\n{c['text']}"
+        for c in contexts
+    ]
 
-RÉPONSE :
-""".strip()
+    context_block = "\n\n".join(parts)
+
+    return (
+        "Tu es un assistant administratif du service scolarité.\n\n"
+        "RÈGLES STRICTES :\n"
+        "1) Reformule UNIQUEMENT la règle donnée.\n"
+        "2) Ne rajoute aucune information.\n"
+        "3) Termine par (page X).\n\n"
+        f"CONTEXTE :\n{context_block}\n\n"
+        f"QUESTION :\n{question}\n\n"
+        "RÉPONSE :"
+    )

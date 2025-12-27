@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     env: str = Field(default="dev", alias="ENV")
     api_v1_prefix: str = Field(default="/api/v1", alias="API_V1_PREFIX")
 
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.1"
+
     # --- Database ---
     database_url: str = Field(alias="DATABASE_URL")
 
@@ -38,6 +41,5 @@ class Settings(BaseSettings):
             for o in self.cors_allowed_origins.split(",")
             if o.strip()
         ]
-
 
 settings = Settings()

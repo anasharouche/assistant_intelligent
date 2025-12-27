@@ -1,22 +1,29 @@
-import requests
-
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "mistral"
+import httpx
+from app.core.config import settings
 
 
 def call_llm(prompt: str) -> str:
     """
-    Appel du LLM local via Ollama
+    Appelle un LLM LOCAL via Ollama.
+    Requiert: Ollama en local (http://localhost:11434)
     """
+    base_url = getattr(settings, "ollama_base_url", "http://localhost:11434")
+    model = getattr(settings, "ollama_model", "llama3.1")
+
     payload = {
-        "model": MODEL_NAME,
+        "model": model,
         "prompt": prompt,
         "stream": False,
+        "options": {
+            "temperature": 0.2,
+        },
     }
 
-    response = requests.post(OLLAMA_URL, json=payload, timeout=120)
-
-    if response.status_code != 200:
-        raise RuntimeError(f"Erreur Ollama : {response.text}")
-
-    return response.json()["response"]
+    try:
+        resp = httpx.post(f"{base_url}/api/generate", json=payload, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+        return (data.get("response") or "").strip() or "Je ne sais pas."
+    except Exception:
+        # Fallback safe (pas de crash API)
+        return "Je ne sais pas (erreur lors de l'appel au modèle local)."
