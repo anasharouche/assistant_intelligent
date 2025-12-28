@@ -4,6 +4,12 @@
 }
 
 {
+  "email": "student@test.com",
+  "password": "student123",
+  "role": "STUDENT"
+}
+
+{
     "data": {
         "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4Iiwicm9sZSI6IlNDT0xBUklURSIsImV4cCI6MTc2Njk0ODU2Mn0.EV6kINXX-Rn2fo6jK7eX77B2ygaHDsmouv54ASnLZcQ",
         "token_type": "bearer"
@@ -12,4 +18,14 @@
         "request_id": null
     },
     "error": null
+}
+
+
+{
+  "document_id": 3,
+  "file_path": "storage/documents/ensegid_reglementpedagogique_fise_2025-2026_vf.pdf"
+}
+
+{
+  "question": "Quelles sont les règles d'absence ?"
 }
