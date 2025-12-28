@@ -5,13 +5,48 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
+
+import { login } from '../lib/services/auth.service';
 
 export default function LoginScreen() {
   const router = useRouter();
+
+  // ===== STATE LOGIQUE (AJOUTÉ) =====
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ===== ACTION LOGIN (AJOUTÉ) =====
+  const onLogin = async () => {
+    if (!email || !password) {
+      setError('Veuillez remplir tous les champs');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      await login({ email, password });
+      router.replace('/(tabs)');
+    } catch (err: any) {
+      // backend renvoie { error: null } ou HTTP error
+      setError(
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.detail ||
+        'Email ou mot de passe incorrect'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <LinearGradient
@@ -34,6 +69,10 @@ export default function LoginScreen() {
             placeholder="Email"
             placeholderTextColor="#9CA3AF"
             style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
           />
 
           <TextInput
@@ -41,14 +80,29 @@ export default function LoginScreen() {
             placeholderTextColor="#9CA3AF"
             secureTextEntry
             style={styles.input}
+            value={password}
+            onChangeText={setPassword}
           />
+
+          {/* MESSAGE ERREUR */}
+          {error && (
+            <Text style={{ color: 'crimson', marginBottom: 8 }}>
+              {error}
+            </Text>
+          )}
 
           {/* BUTTON */}
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => router.replace('/(tabs)')}
+            onPress={onLogin}
+            disabled={loading}
+            activeOpacity={0.85}
           >
-            <Text style={styles.primaryText}>Login</Text>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryText}>Login</Text>
+            )}
           </TouchableOpacity>
 
           {/* FOOTER */}
@@ -65,7 +119,7 @@ export default function LoginScreen() {
   );
 }
 
-/* ================= STYLES ================= */
+/* ================= STYLES (INCHANGÉS) ================= */
 
 const styles = StyleSheet.create({
   safe: {

@@ -56,7 +56,7 @@ export default function ChatbotScreen() {
         <View style={styles.buttons}>
           <TouchableOpacity
             style={styles.skipButton}
-            onPress={() => router.push('/')}
+            onPress={() => router.replace('/')}
           >
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
@@ -68,11 +68,13 @@ export default function ChatbotScreen() {
             <Text style={styles.nextText}>Next</Text>
           </TouchableOpacity>
         </View>
+
       </View>
     </SafeAreaView>
   );
 }
 
+/* ================= STYLES (INCHANGÉS) ================= */
 
 const styles = StyleSheet.create({
   safe: {
@@ -94,8 +96,8 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: '#6B7280',
-    marginTop: 4,     
-    marginBottom: 12 
+    marginTop: 4,
+    marginBottom: 12,
   },
 
   imageContainer: {

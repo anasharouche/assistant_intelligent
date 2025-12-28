@@ -5,13 +5,50 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
+
+import { register } from '../lib/services/auth.service';
 
 export default function RegisterScreen() {
   const router = useRouter();
+
+  // ===== STATE LOGIQUE (AJOUTÉ) =====
+  const [name, setName] = useState(''); // UI seulement
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 🔐 Rôle FIXE conforme backend
+  const role = 'STUDENT';
+
+  const onRegister = async () => {
+    if (!email || !password) {
+      setError('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      await register({ email, password, role });
+      router.replace('/(tabs)');
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.detail ||
+        'Inscription échouée'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <LinearGradient
@@ -34,12 +71,18 @@ export default function RegisterScreen() {
             placeholder="Name"
             placeholderTextColor="#9CA3AF"
             style={styles.input}
+            value={name}
+            onChangeText={setName}
           />
 
           <TextInput
             placeholder="Email"
             placeholderTextColor="#9CA3AF"
             style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
           />
 
           <TextInput
@@ -47,14 +90,29 @@ export default function RegisterScreen() {
             placeholderTextColor="#9CA3AF"
             secureTextEntry
             style={styles.input}
+            value={password}
+            onChangeText={setPassword}
           />
+
+          {/* ERREUR */}
+          {error && (
+            <Text style={{ color: 'crimson', marginBottom: 8 }}>
+              {error}
+            </Text>
+          )}
 
           {/* BUTTON */}
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => router.replace('/(auth)/login')}
+            onPress={onRegister}
+            disabled={loading}
+            activeOpacity={0.85}
           >
-            <Text style={styles.primaryText}>Sign Up</Text>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryText}>Sign Up</Text>
+            )}
           </TouchableOpacity>
 
           {/* FOOTER */}
@@ -71,7 +129,7 @@ export default function RegisterScreen() {
   );
 }
 
-/* ================= STYLES ================= */
+/* ================= STYLES (INCHANGÉS) ================= */
 
 const styles = StyleSheet.create({
   safe: {

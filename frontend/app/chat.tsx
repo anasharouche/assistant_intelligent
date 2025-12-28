@@ -14,6 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 
+import { http } from '../app/lib/api/http';
+import { ENDPOINTS } from '../app/lib/api/endpoints';
+
 type Message = {
   id: string;
   role: 'user' | 'assistant';
@@ -26,26 +29,11 @@ export default function ChatScreen() {
 
   const [input, setInput] = useState('');
   const [showRobot, setShowRobot] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const [messages, setMessages] = useState<Message[]>([
-    { id: '1', role: 'user', text: 'What do I need to get started?' },
-    { id: '2', role: 'assistant', text: "You'll need flour, eggs, and a pinch of salt." },
-    {
-      id: '3',
-      role: 'assistant',
-      text: "Typically, you'll want about 2 cups of flour for every egg. It's a good ratio to start with!",
-    },
-    { id: '4', role: 'user', text: 'And how do I mix them together?' },
-    {
-      id: '5',
-      role: 'assistant',
-      text:
-        'First, make a mound of flour on a clean surface, then create a well in the center. Crack the eggs into the well and sprinkle a little salt. Use a fork to gradually mix the flour into the eggs.',
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
-  const canSend = input.trim().length > 0;
-
+  const canSend = input.trim().length > 0 && !loading;
   const data = useMemo(() => messages, [messages]);
 
   const scrollToEnd = () => {
@@ -54,26 +42,78 @@ export default function ChatScreen() {
     });
   };
 
-  const onSend = () => {
+  const onSend = async () => {
     if (!canSend) return;
+
+    const question = input.trim();
 
     const userMsg: Message = {
       id: String(Date.now()),
       role: 'user',
-      text: input.trim(),
+      text: question,
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput('');
-    setTimeout(scrollToEnd, 50);
+    setShowRobot(false);
+    setLoading(true);
+
+    try {
+      const res = await http.post(ENDPOINTS.RAG.QUERY, {
+        question,
+      });
+
+      const answer: string =
+        res.data?.answer ??
+        'Je ne peux pas répondre pour le moment.';
+
+      const assistantMsg: Message = {
+        id: String(Date.now() + 1),
+        role: 'assistant',
+        text: answer,
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (error) {
+      const errorMsg: Message = {
+        id: String(Date.now() + 2),
+        role: 'assistant',
+        text:
+          'Une erreur est survenue lors de la récupération de la réponse.',
+      };
+
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setLoading(false);
+      setTimeout(scrollToEnd, 50);
+    }
   };
 
   const renderItem = ({ item }: { item: Message }) => {
     const isUser = item.role === 'user';
     return (
-      <View style={[styles.bubbleRow, isUser ? styles.rowRight : styles.rowLeft]}>
-        <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
-          <Text style={[styles.bubbleText, isUser ? styles.textUser : styles.textAssistant]}>
+      <View
+        style={[
+          styles.bubbleRow,
+          isUser ? styles.rowRight : styles.rowLeft,
+        ]}
+      >
+        <View
+          style={[
+            styles.bubble,
+            isUser
+              ? styles.bubbleUser
+              : styles.bubbleAssistant,
+          ]}
+        >
+          <Text
+            style={[
+              styles.bubbleText,
+              isUser
+                ? styles.textUser
+                : styles.textAssistant,
+            ]}
+          >
             {item.text}
           </Text>
         </View>
@@ -87,26 +127,40 @@ export default function ChatScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={22} color="#111827" />
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.headerBtn}
+        >
+          <Ionicons
+            name="chevron-back"
+            size={22}
+            color="#111827"
+          />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cooking Pasta</Text>
+        <Text style={styles.headerTitle}>
+          Assistant Scolarité
+        </Text>
         <View style={styles.headerRightSpace} />
       </View>
 
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        behavior={
+          Platform.OS === 'ios' ? 'padding' : 'height'
+        }
       >
         {/* ROBOT (avant interaction) */}
         {showRobot && (
           <View style={styles.robotContainer}>
             <Image
-              source={{ uri: 'https://cdn-icons-png.flaticon.com/512/4712/4712109.png' }}
+              source={{
+                uri: 'https://cdn-icons-png.flaticon.com/512/4712/4712109.png',
+              }}
               style={styles.robot}
             />
-            <Text style={styles.robotText}>Ask me anything 👋</Text>
+            <Text style={styles.robotText}>
+              Ask me anything 👋
+            </Text>
           </View>
         )}
 
@@ -137,10 +191,17 @@ export default function ChatScreen() {
           <TouchableOpacity
             onPress={onSend}
             activeOpacity={0.85}
-            style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
+            style={[
+              styles.sendBtn,
+              !canSend && styles.sendBtnDisabled,
+            ]}
             disabled={!canSend}
           >
-            <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
+            <Ionicons
+              name="arrow-up"
+              size={18}
+              color="#FFFFFF"
+            />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -148,7 +209,7 @@ export default function ChatScreen() {
   );
 }
 
-/* ================= STYLES ================= */
+/* ================= STYLES (INCHANGÉS) ================= */
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
